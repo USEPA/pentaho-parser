@@ -58,5 +58,5 @@ The script will create the following structure in the output directory:
     business_logic_summary.txt
 
 # Notes
-- The SQL extraction is based on standard ktr and kjb files.
+- The SQL extraction is based on standard ktr and kjb file formats.
 - The business logic detection is based on common SQL patterns. Adjust the regular expression in the script to fit specific needs.
