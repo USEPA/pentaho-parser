@@ -1,6 +1,7 @@
 import os
 import pandas as pd
 import xml.etree.ElementTree as ET
+import re
 
 def log(message):
     print(message)
@@ -137,6 +138,121 @@ def export_to_excel(steps, sql_statements, relationships, output_file):
             # Ensure at least one sheet is created to avoid the IndexError
             pd.DataFrame({'Message': ['No relationships found']}).to_excel(writer, sheet_name='NoData', index=False)
 
+def extract_sql_from_files(source_directory, output_directory):
+    # Adjusted regular expression to more strictly match SQL queries.
+    sql_pattern = re.compile(r'<sql>([\s\S]*?)<\/sql>', re.IGNORECASE)
+
+    # Expanded pattern to detect all forms of embedded business logic
+    business_logic_pattern = re.compile(
+        r'\b(CASE\b|SUM\(|AVG\(|COUNT\(|MIN\(|MAX\(|ROW_NUMBER\(|RANK\(|LEAD\(|LAG\(|'
+        r'IF\(|COALESCE\(|NULLIF\(|ISNULL\(|DATEDIFF\(|DATEADD\(|CONCAT\(|'
+        r'CAST\(|CONVERT\(|TO_CHAR\(|TO_DATE\(|GROUP BY\b|HAVING\b|ARRAY_AGG\(|'
+        r'UNNEST\(|JSON_OBJECT\(|JSON_ARRAYAGG\(|JSON_EXTRACT\(|STRING_AGG\(|'
+        r'ABS\(|ROUND\(|CEIL\(|FLOOR\(|UPPER\(|LOWER\(|TRIM\(|REPLACE\()',
+        re.IGNORECASE
+    )
+
+    combined_sql_queries = []  # To store all SQL queries for the master SQL extract
+    combined_business_logic_queries = []  # To store all business logic queries for the master business logic extract
+    summary_data = []  # To store summary information for each file
+
+    # Walk through the directory structure of the source
+    for root, dirs, files in os.walk(source_directory):
+        for file in files:
+            if file.endswith(".ktr") or file.endswith(".kjb"):
+                file_path = os.path.join(root, file)
+
+                # Read file content
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read()
+
+                # Capture SQL queries using stricter pattern
+                sql_matches = sql_pattern.findall(content)
+                logic_summary = {}
+
+                if sql_matches:
+                    # Prepare output directories based on script's working directory
+                    relative_path = os.path.relpath(root, source_directory)  # Mirror structure
+                    output_dir = os.path.join(output_directory, relative_path)
+                    os.makedirs(output_dir, exist_ok=True)
+
+                    logic_summary['file'] = file_path
+                    logic_summary['sql_query_count'] = len(sql_matches)
+                    logic_summary['business_logic_types'] = set()
+
+                    # Create directory-level SQL extract
+                    output_filename = os.path.join(output_dir, f"{file}_extract.txt")
+                    with open(output_filename, 'w') as output_file:
+                        output_file.write(f"File Count: 1\n")
+                        output_file.write(f"File Name: {file_path}\n\n")
+                        
+                        for query in sql_matches:
+                            query_clean = query.strip()
+                            output_file.write(f"SQL Query:\n{query_clean}\n\n")
+
+                            # Add to master SQL extract
+                            combined_sql_queries.append({
+                                'file': file_path,
+                                'query': query_clean
+                            })
+
+                            # Check for business logic and update summary
+                            if business_logic_pattern.search(query_clean):
+                                business_logic_filename = os.path.join(output_dir, f"{file}_business_logic.txt")
+                                with open(business_logic_filename, 'a') as business_logic_file:
+                                    if os.path.getsize(business_logic_filename) == 0:
+                                        business_logic_file.write(f"File Count: 1\n")
+                                        business_logic_file.write(f"File Name: {file_path}\n\n")
+                                    
+                                    business_logic_file.write(f"Business Logic Query:\n{query_clean}\n\n")
+
+                                combined_business_logic_queries.append({
+                                    'file': file_path,
+                                    'query': query_clean
+                                })
+
+                                # Detect specific logic types
+                                for logic_type in ['CASE', 'SUM', 'COUNT', 'GROUP BY', 'HAVING']:
+                                    if logic_type in query_clean:
+                                        logic_summary['business_logic_types'].add(logic_type)
+
+                    summary_data.append(logic_summary)
+
+    # Write the summary data to a separate file
+    summary_filename = os.path.join(output_directory, "business_logic_summary.txt")
+    with open(summary_filename, 'w') as summary_file:
+        summary_file.write("Summary of Business Logic Across Files\n")
+        summary_file.write("="*50 + "\n\n")
+        for entry in summary_data:
+            summary_file.write(f"File: {entry['file']}\n")
+            summary_file.write(f"Total SQL Queries: {entry['sql_query_count']}\n")
+            summary_file.write(f"Business Logic Types Detected: {', '.join(entry['business_logic_types']) if entry['business_logic_types'] else 'None'}\n")
+            summary_file.write("\n" + "="*50 + "\n\n")
+
+    # Write the combined SQL queries to a master file with summary stats
+    combined_sql_filename = os.path.join(output_directory, "master_sql_extract.txt")
+    with open(combined_sql_filename, 'w') as master_sql_file:
+        master_sql_file.write(f"File Count: {len(set(entry['file'] for entry in combined_sql_queries))}\n")
+        master_sql_file.write(f"File Names: {', '.join(set(entry['file'] for entry in combined_sql_queries))}\n\n")
+        
+        for entry in combined_sql_queries:
+            master_sql_file.write(f"File: {entry['file']}\n")
+            master_sql_file.write(f"SQL Query:\n{entry['query']}\n")
+            master_sql_file.write("\n" + "="*80 + "\n\n")
+
+    # Write the combined business logic queries to a master business logic file
+    if combined_business_logic_queries:
+        combined_business_logic_filename = os.path.join(output_directory, "master_business_logic_extract.txt")
+        with open(combined_business_logic_filename, 'w') as master_business_logic_file:
+            master_business_logic_file.write(f"File Count: {len(set(entry['file'] for entry in combined_business_logic_queries))}\n")
+            master_business_logic_file.write(f"File Names: {', '.join(set(entry['file'] for entry in combined_business_logic_queries))}\n\n")
+            
+            for entry in combined_business_logic_queries:
+                master_business_logic_file.write(f"File: {entry['file']}\n")
+                master_business_logic_file.write(f"Business Logic Query:\n{entry['query']}\n")
+                master_business_logic_file.write("\n" + "="*80 + "\n\n")
+
+
 # Export SQL statements to a text file
 def export_sql_statements(sql_statements, output_file):
     with open(output_file, 'w') as file:
@@ -148,29 +264,39 @@ def export_sql_statements(sql_statements, output_file):
 
 # Main function
 if __name__ == "__main__":
-    directory_path = 'etl-code'
-    os.makedirs('by_directory_export', exist_ok=True)
+    source_directory = '../etl-code'  # Directory with .ktr and .kjb files
+    output_directory = os.path.dirname(os.path.realpath(__file__))  # Directory where the script is located
+    os.makedirs(output_directory, exist_ok=True)
     
     # Generate export for each directory
-    for root, dirs, _ in os.walk(directory_path):
+    for root, dirs, _ in os.walk(source_directory):
         dirs[:] = [d for d in dirs if not d.startswith('.')]  # Exclude hidden directories
         for subdir in dirs:
             subdir_path = os.path.join(root, subdir)
             print(f"Analyzing directory: {subdir_path}")
             steps, sql_statements, relationships = traverse_directory(subdir_path)
             
-            output_file_excel = os.path.join("by_directory_export", f'{subdir}_data_vault_relationships.xlsx')
-            output_file_sql = os.path.join("by_directory_export", f'{subdir}_sql_statements.txt')
+            # Store in output_directory, maintaining the sub-directory structure
+            relative_subdir = os.path.relpath(subdir_path, source_directory)
+            output_subdir = os.path.join(output_directory, relative_subdir)
+            os.makedirs(output_subdir, exist_ok=True)
+            
+            output_file_excel = os.path.join(output_subdir, f'{subdir}_data_vault_relationships.xlsx')
+            output_file_sql = os.path.join(output_subdir, f'{subdir}_sql_statements.txt')
             
             export_to_excel(steps, sql_statements, relationships, output_file_excel)
             export_sql_statements(sql_statements, output_file_sql)
             
             print(f"Export completed for directory: {subdir_path}. Check the Excel and SQL files for the output.")
     
+    # Run the SQL and business logic extraction
+    print("Extracting SQL and Business Logic...")
+    extract_sql_from_files(source_directory, output_directory)
+    
     # Generate combined export for all directories
     print("Generating combined export...")
-    combined_steps, combined_sql_statements, combined_relationships = traverse_directory(directory_path)
-    export_to_excel(combined_steps, combined_sql_statements, combined_relationships, 'data_vault_relationships.xlsx')
-    export_sql_statements(combined_sql_statements, 'sql_statements.txt')
+    combined_steps, combined_sql_statements, combined_relationships = traverse_directory(source_directory)
+    export_to_excel(combined_steps, combined_sql_statements, combined_relationships, os.path.join(output_directory, 'data_vault_relationships.xlsx'))
+    export_sql_statements(combined_sql_statements, os.path.join(output_directory, 'sql_statements.txt'))
 
     print("All directories processed. Combined export completed.")

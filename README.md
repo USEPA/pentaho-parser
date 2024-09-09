@@ -1,74 +1,62 @@
-# Data Vault Relationship Extraction
+# Data Vault Relationship Extractor
 
-This script traverses a specified directory to parse Kettle (.ktr and .kjb) files, extract ETL steps, infer relationships, and export the results to Excel and SQL files. It generates individual reports for each subdirectory and a combined report for all directories.
+## Overview
 
-## Prerequisites
+This script extracts SQL queries, business logic, and relationships from Kettle transformation (.ktr) and job (.kjb) files, then organizes the data into both Excel and text file formats. Additionally, it provides a summary of business logic detected across files.
+
+### Key Features:
+1. **Extract SQL Queries**: Captures SQL queries from transformation steps in `.ktr` and `.kjb` files.
+2. **Business Logic Extraction**: Detects and extracts business logic patterns such as `CASE`, `SUM`, `COUNT`, `GROUP BY`, etc., from SQL queries.
+3. **Relationships and Steps Export**: Relationships between tables, schemas, and columns are inferred from the transformation steps and exported to an Excel file, alongside the ETL steps.
+4. **SQL Export**: Extracted SQL queries are saved into individual text files and combined into a master file.
+5. **Business Logic Summary**: A summary file detailing the business logic types detected in each SQL query is generated, including a master text file with business logic queries.
+
+### Structure of Outputs:
+
+- **SQL Extracts**: SQL queries are saved to text files for each `.ktr` or `.kjb` file. A master SQL extract file is also generated.
+- **Business Logic Extracts**: If business logic is detected, the relevant queries are saved in text files alongside the SQL extracts. A master business logic extract file is generated.
+- **Excel Export**: Excel files containing relationships, ETL steps, and SQL queries are exported per directory and combined for all directories.
+- **Business Logic Summary**: A summary text file with a breakdown of the business logic types (e.g., `CASE`, `GROUP BY`, `SUM`) detected across files.
+
+### Requirements:
 
 - Python 3.x
-- pandas
-- openpyxl
-- xml.etree.ElementTree
+- `pandas`
+- `openpyxl`
+- `xml.etree.ElementTree`
+- `re` (regex module)
 
-## Installation
+### Usage
 
-1. Clone the repository or download the script.
-2. Ensure you have the required Python packages installed. You can install them using pip:
+1. Update `source_directory` in the script to point to the folder containing your `.ktr` and `.kjb` files.
+2. Run the script using Python. The script will recursively scan directories, extract relevant information, and output the results to the directory where the script is located.
 
-    ```bash
-    pip install pandas openpyxl
-    ```
+```bash
+python data_vault_script.py
 
-## Usage
+# File Structure
+/source_directory/: Directory containing .ktr and .kjb files.
+/by_directory_export/: Output directory containing all extracts and reports.
+<subdir>_data_vault_relationships.xlsx: Excel file with relationships and ETL steps.
+<subdir>_sql_statements.txt: SQL query extracts.
+<subdir>_business_logic.txt: Business logic query extracts (if applicable).
+master_sql_extract.txt: Master file with all SQL queries.
+master_business_logic_extract.txt: Master file with all business logic queries.
+business_logic_summary.txt: Summary of business logic types detected across files.
 
-1. Place your Kettle files (.ktr and .kjb) and SQL files in a directory.
-2. Update the `directory_path` variable in the script to point to your directory.
-3. Run the script:
+# Example
+The script will create the following structure in the output directory:
 
-    ```bash
-    python data_lineage_script.py
-    ```
+/output_directory/
+    /by_directory_export/
+        /<subdir>/
+            <subdir>_data_vault_relationships.xlsx
+            <subdir>_sql_statements.txt
+            <subdir>_business_logic.txt (if applicable)
+    master_sql_extract.txt
+    master_business_logic_extract.txt
+    business_logic_summary.txt
 
-## Script Overview
-
-The script performs the following steps:
-
-1. **Parse Transformation Steps**: Parses Kettle files to extract ETL steps and SQL statements.
-2. **Traverse Directories**: Walks through the specified directory, processing each file and extracting relevant information.
-3. **Infer Relationships**: Infers relationships between ETL steps based on common tables and schemas.
-4. **Export to Excel and SQL**: Exports the extracted steps, relationships, and SQL statements to Excel and SQL files.
-
-## Outputs
-
-The script generates the following outputs:
-
-1. **By Directory Export**: For each subdirectory, it generates:
-    - An Excel file (`<subdir>_data_vault_relationships.xlsx`) containing:
-        - `ETL Steps`: Details of each ETL step.
-        - `Relationships`: Inferred relationships between steps.
-        - `SQL Statements`: Extracted SQL statements.
-    - A text file (`<subdir>_sql_statements.txt`) containing all extracted SQL statements.
-
-2. **Combined Export**: For all directories combined, it generates:
-    - An Excel file (`data_vault_relationships.xlsx`) containing:
-        - `ETL Steps`: Details of each ETL step.
-        - `Relationships`: Inferred relationships between steps.
-        - `SQL Statements`: Extracted SQL statements.
-    - A text file (`sql_statements.txt`) containing all extracted SQL statements.
-
-## Example Output Structure
-
-output/
-├── by_directory_export/
-│ ├── subdir1_data_vault_relationships.xlsx
-│ ├── subdir1_sql_statements.txt
-│ ├── subdir2_data_vault_relationships.xlsx
-│ ├── subdir2_sql_statements.txt
-│ └── ...
-├── data_vault_relationships.xlsx
-└── sql_statements.txt
-
-
-## Notes
-
-- Ensure that your directory structure does not contain hidden files or directories unless they are intended to be processed.
-- The script handles encoding issues gracefully by skipping files that cannot be read due to encoding problems.
+# Notes
+- Ensure your .ktr and .kjb files are properly formatted to allow accurate extraction of SQL and relationships.
+- The business logic detection is based on common SQL patterns. Adjust the regular expression in the script to fit specific needs.
